@@ -15,21 +15,70 @@ namespace MedVault.Api.Controllers
         [HttpPost("create-initial-users")]
         public async Task<IActionResult> Seed()
         {
-            var adminRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
-            var doctorRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "Doctor");
-            var radiology = await db.Departments.FirstOrDefaultAsync(d => d.Name == "Radiology");
+            await using var tx = await db.Database.BeginTransactionAsync();
+            try
+            {
+                // Ensure roles
+                var adminRole = await db.Roles.SingleOrDefaultAsync(r => r.Name == "Admin");
+                if (adminRole == null)
+                {
+                    adminRole = new Roles { Id = Guid.NewGuid(), Name = "Admin", Description = "Admins with full access" };
+                    db.Roles.Add(adminRole);
+                }
 
+                var doctorRole = await db.Roles.SingleOrDefaultAsync(r => r.Name == "Doctor");
+                if (doctorRole == null)
+                {
+                    doctorRole = new Roles { Id = Guid.NewGuid(), Name = "Doctor", Description = "Doctors scoped by department" };
+                    db.Roles.Add(doctorRole);
+                }
 
-            if (!db.AppUsers.Any(u => u.UserName == "admin"))
-                db.AppUsers.Add(new Models.AppUsers { Id = Guid.NewGuid(), UserName = "admin", PasswordHash = auth.HashPassword("MedVault!2025"), RoleId = adminRole!.Id, IsActive = true });
+                // Ensure a department
+                var radiology = await db.Departments.SingleOrDefaultAsync(d => d.Name == "Radiology");
+                if (radiology == null)
+                {
+                    radiology = new Departments { Id = Guid.NewGuid(), Name = "Radiology" };
+                    db.Departments.Add(radiology);
+                }
 
+                await db.SaveChangesAsync();
 
-            if (!db.AppUsers.Any(u => u.UserName == "doctor"))
-                db.AppUsers.Add(new Models.AppUsers { Id = Guid.NewGuid(), UserName = "doctor", PasswordHash = auth.HashPassword("MedVault!2025"), RoleId = doctorRole!.Id, DepartmentId = radiology!.Id, IsActive = true });
+                // Users
+                if (!await db.AppUsers.AnyAsync(u => u.UserName == "admin"))
+                {
+                    db.AppUsers.Add(new AppUsers
+                    {
+                        Id = Guid.NewGuid(),
+                        UserName = "admin",
+                        PasswordHash = auth.HashPassword("MedVault!2025"),
+                        RoleId = adminRole.Id,
+                        IsActive = true
+                    });
+                }
 
+                if (!await db.AppUsers.AnyAsync(u => u.UserName == "doctor"))
+                {
+                    db.AppUsers.Add(new AppUsers
+                    {
+                        Id = Guid.NewGuid(),
+                        UserName = "doctor",
+                        PasswordHash = auth.HashPassword("MedVault!2025"),
+                        RoleId = doctorRole.Id,
+                        DepartmentId = radiology.Id,
+                        IsActive = true
+                    });
+                }
 
-            await db.SaveChangesAsync();
-            return Ok(new { ok = true });
+                await db.SaveChangesAsync();
+                await tx.CommitAsync();
+                return Ok(new { ok = true });
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                // Return full problem details so you can see the exact reason in Postman
+                return Problem(ex.ToString());
+            }
         }
     }
 }
