@@ -8,10 +8,6 @@ namespace MedVault.Api.Models;
 
 public partial class MedVaultDbContext : DbContext
 {
-    public MedVaultDbContext()
-    {
-    }
-
     public MedVaultDbContext(DbContextOptions<MedVaultDbContext> options)
         : base(options)
     {
@@ -34,10 +30,6 @@ public partial class MedVaultDbContext : DbContext
     public virtual DbSet<Roles> Roles { get; set; }
 
     public virtual DbSet<ScannedMedicalRecords> ScannedMedicalRecords { get; set; }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=(local);Database=MedVaultDb;Trusted_Connection=True;Encrypt=False;MultipleActiveResultSets=true");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -119,16 +111,26 @@ public partial class MedVaultDbContext : DbContext
         {
             entity.HasKey(e => e.Id).HasName("PK__Encounte__3214EC07B3DB44AB");
 
+            entity.HasIndex(e => new { e.ClinicianId, e.EncounterDate }, "IX_Encounters_Clinician_Start").IsDescending(false, true);
+
             entity.HasIndex(e => new { e.PatientId, e.EncounterDate }, "IX_Encounters_Patient").IsDescending(false, true);
+
+            entity.HasIndex(e => new { e.PatientId, e.EncounterDate }, "IX_Encounters_Patient_Start").IsDescending(false, true);
 
             entity.Property(e => e.Id).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasAnnotation("Relational:DefaultConstraintName", "DF_Encounters_CreatedAt");
+            entity.Property(e => e.Reason).HasMaxLength(200);
+            entity.Property(e => e.Status)
+                .IsRequired()
+                .HasMaxLength(16)
+                .HasDefaultValue("Scheduled")
+                .HasAnnotation("Relational:DefaultConstraintName", "DF_Enc_Status");
 
             entity.HasOne(d => d.Clinician).WithMany(p => p.Encounters)
                 .HasForeignKey(d => d.ClinicianId)
-                .HasConstraintName("FK_Encounters_User");
+                .HasConstraintName("FK_Encounters_Clinician");
 
             entity.HasOne(d => d.Department).WithMany(p => p.Encounters)
                 .HasForeignKey(d => d.DepartmentId)
