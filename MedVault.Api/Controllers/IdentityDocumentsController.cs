@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Security.Claims;
+using MedVault.Api.Dtos;  
 
 
 namespace MedVault.Api.Controllers
@@ -24,20 +25,33 @@ namespace MedVault.Api.Controllers
 
 
         [HttpPost("{patientId:guid}"), Authorize(Policy = "AdminOnly")]
-        [RequestSizeLimit(25_000_000)]
-        public async Task<IActionResult> Upload(Guid patientId, [FromForm] IFormFile? scan, [FromForm] string docType, [FromForm] string docNumber,
-        [FromForm] string? issueDateIso, [FromForm] string? expiryDateIso)
+        [Consumes("multipart/form-data")]
+        [RequestFormLimits(ValueCountLimit = 10_000, MultipartBodyLengthLimit = 100_000_000)]  
+        public async Task<IActionResult> Upload(Guid patientId, [FromForm] IdentityDocUploadDto form)
         {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+             
+            var p = await db.Patients.FindAsync(patientId);
+            if (p is null) return NotFound("Pacijent ne postoji.");
+
             var doc = new Models.PatientIdentityDocuments
             {
                 Id = Guid.NewGuid(),
                 PatientId = patientId,
-                DocType = docType,
-                DocNumberEnc = crypto.EncryptString(docNumber, out _, out _),
-                IssueDateEnc = string.IsNullOrWhiteSpace(issueDateIso) ? null : crypto.EncryptString(issueDateIso, out _, out _),
-                ExpiryDateEnc = string.IsNullOrWhiteSpace(expiryDateIso) ? null : crypto.EncryptString(expiryDateIso, out _, out _)
+                DocType = form.DocType,
+                DocNumberEnc = crypto.EncryptString(form.DocNumber, out _, out _),
+                IssueDateEnc = string.IsNullOrWhiteSpace(form.IssueDateIso) ? null : crypto.EncryptString(form.IssueDateIso, out _, out _),
+                ExpiryDateEnc = string.IsNullOrWhiteSpace(form.ExpiryDateIso) ? null : crypto.EncryptString(form.ExpiryDateIso, out _, out _)
             };
-            if (scan != null) { using var ms = new MemoryStream(); await scan.CopyToAsync(ms); doc.ScanBlob = crypto.Encrypt(ms.ToArray(), out _, out _); }
+
+            if (form.Scan != null && form.Scan.Length > 0)
+            {
+                using var ms = new MemoryStream();
+                await form.Scan.CopyToAsync(ms);
+                doc.ScanBlob = crypto.Encrypt(ms.ToArray(), out _, out _);
+            }
+
             db.PatientIdentityDocuments.Add(doc);
             await db.SaveChangesAsync();
             return Ok(new { doc.Id });
