@@ -21,28 +21,7 @@ namespace MedVault.Api.Controllers
             var dept = User.FindFirst("dept")?.Value;
             return (role, Guid.TryParse(dept, out var d) ? d : null);
         }
-        //[HttpPost("create"), Authorize(Policy = "AdminOnly")]
-        //public async Task<IActionResult> Create([FromBody] PatientCreateDto dto)
-        //{
-        //    byte[] Enc(string s) => crypto.Encrypt(System.Text.Encoding.UTF8.GetBytes(s), out _, out _);
-        //    var p = new Models.Patients
-        //    {
-        //        Id = Guid.NewGuid(),
-        //        MedicalRecordNumber = dto.MedicalRecordNumber,
-        //        LastNameEnc = Enc(dto.LastName),
-        //        FirstNameEnc = Enc(dto.FirstName),
-        //        JMBGEnc = Enc(dto.JMBG),
-        //        AddressEnc = string.IsNullOrWhiteSpace(dto.Address) ? null : Enc(dto.Address),
-        //        PhoneEnc = string.IsNullOrWhiteSpace(dto.Phone) ? null : Enc(dto.Phone),
-        //        EmailEnc = string.IsNullOrWhiteSpace(dto.Email) ? null : Enc(dto.Email),
-        //        LastNameHmac = idx.HmacIndex(dto.LastName),
-        //        JmbgHmac = idx.HmacIndex(dto.JMBG),
-        //        DepartmentId = dto.DepartmentId
-        //    };
-        //    db.Patients.Add(p);
-        //    await db.SaveChangesAsync();
-        //    return Ok(new { p.Id });
-        //}
+        
         [HttpPost("create"), Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> Create([FromBody] PatientCreateDto dto)
         {
@@ -72,18 +51,7 @@ namespace MedVault.Api.Controllers
         }
 
 
-        //[HttpGet("search"), Authorize(Policy = "DoctorOrAdmin")]
-        //public async Task<IActionResult> Search([FromQuery] string? lastName, [FromQuery] string? jmbg)
-        //{
-        //    var (role, deptId) = CurrentRole();
-        //    IQueryable<Models.Patients> q = db.Patients;
-        //    if (!string.IsNullOrWhiteSpace(lastName)) q = q.Where(p => p.LastNameHmac == idx.HmacIndex(lastName));
-        //    if (!string.IsNullOrWhiteSpace(jmbg)) q = q.Where(p => p.JmbgHmac == idx.HmacIndex(jmbg));
-        //    if (string.Equals(role, "Doctor", StringComparison.OrdinalIgnoreCase)) q = q.Where(p => p.DepartmentId == deptId);
-        //    var res = await q.OrderByDescending(p => p.CreatedAt).Take(50)
-        //    .Select(p => new { p.Id, p.MedicalRecordNumber, p.CreatedAt, p.DepartmentId }).ToListAsync();
-        //    return Ok(res);
-        //}
+        
         [HttpGet("search"), Authorize(Policy = "DoctorOrAdmin")]
         public async Task<IActionResult> Search([FromQuery] string? lastName, [FromQuery] string? jmbg)
         {
@@ -96,8 +64,6 @@ namespace MedVault.Api.Controllers
             {
                 var norm = OnlyDigits(jmbg.Trim());
                 var jmbgHash = idx.HmacIndex(norm);
-
-                // Fallback ako su stari rekordi hashovani bez normalizacije:
                 byte[]? legacyHash = norm == jmbg.Trim() ? null : idx.HmacIndex(jmbg.Trim());
 
                 q = q.Where(p => p.JmbgHmac != null &&
@@ -114,10 +80,22 @@ namespace MedVault.Api.Controllers
             if (string.Equals(role, "Doctor", StringComparison.OrdinalIgnoreCase))
                 q = q.Where(p => p.DepartmentId == deptId);
 
-            var res = await q.OrderByDescending(p => p.CreatedAt)
+            // 1) pokupi potrebna polja iz baze
+            var raw = await q.OrderByDescending(p => p.CreatedAt)
                              .Take(50)
-                             .Select(p => new { p.Id, p.MedicalRecordNumber, p.CreatedAt, p.DepartmentId })
+                             .Select(p => new { p.Id, p.MedicalRecordNumber, p.CreatedAt, p.FirstNameEnc, p.LastNameEnc })
                              .ToListAsync();
+
+            // 2) dešifruj ime i prezime u memoriji i vrati čista polja
+            string Dec(byte[] b) => crypto.DecryptToString(b);
+
+            var res = raw.Select(p => new {
+                p.Id,
+                p.MedicalRecordNumber,
+                p.CreatedAt,
+                FirstName = Dec(p.FirstNameEnc),
+                LastName = Dec(p.LastNameEnc)
+            });
 
             return Ok(res);
         }

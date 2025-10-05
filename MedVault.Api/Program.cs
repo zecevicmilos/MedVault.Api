@@ -56,8 +56,11 @@ b.Services.AddAuthorization(o => {
 });
 
 
-b.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
-
+b.Services.AddCors(o => o.AddDefaultPolicy(p => p
+    .AllowAnyOrigin()
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .WithExposedHeaders("Content-Disposition", "Content-Type")));
 
 var app = b.Build();
 app.UseCors();

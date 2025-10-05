@@ -21,6 +21,10 @@ public partial class Encounters
 
     public DateTime CreatedAt { get; set; }
 
+    public string Reason { get; set; }
+
+    public string Status { get; set; }
+
     public virtual AppUsers Clinician { get; set; }
 
     public virtual Departments Department { get; set; }
