@@ -39,7 +39,6 @@ namespace MedVault.Api.Controllers
         public record ScheduleDto(Guid PatientId, DateTime EncounterDate, string? Reason);
         public record CompleteDto(string? Notes);
 
-        // DETAIL jedne posete/termina (sa dešifrovanim imenom pacijenta)
         [HttpGet("detail/{id:guid}"), Authorize(Policy = "DoctorOrAdmin")]
         public async Task<IActionResult> Detail(Guid id)
         {
@@ -59,14 +58,11 @@ namespace MedVault.Api.Controllers
                 .SingleOrDefaultAsync();
             if (p == null) return NotFound("Pacijent nije pronađen.");
 
-            // Doktorski guard (isto odeljenje; ako je dodeljen termin, isti doktor)
+            // 🚩 Dozvoli lekaru da vidi sve iz svog odeljenja (nema više uslova za ClinicianId)
             if (Role() == "Doctor")
             {
                 var dept = CurrentDeptId();
                 if (dept.HasValue && p.DepartmentId.HasValue && dept != p.DepartmentId)
-                    return Forbid();
-                var uid = CurrentUserId();
-                if (enc.ClinicianId.HasValue && uid.HasValue && enc.ClinicianId != uid)
                     return Forbid();
             }
 
@@ -83,15 +79,15 @@ namespace MedVault.Api.Controllers
                 enc.Status,
                 enc.Reason,
                 enc.ClinicianId
-
             });
         }
+
         // LIST za doktora (više pacijenata) sa opcijama filtra
         [HttpGet("for-doctor"), Authorize(Policy = "DoctorOrAdmin")]
         public async Task<IActionResult> ListForDoctor(
             [FromQuery] string status = "Scheduled",      // Scheduled|Completed|Canceled|"" (svi)
             [FromQuery] int daysBack = 1,                 // od kada (relativno)
-            [FromQuery] int daysAhead = 14,               // do kada (relativno)
+            [FromQuery] int daysAhead = 1400,               // do kada (relativno)
             [FromQuery] Guid? doctorId = null             // Admin može birati doktora; doktor ignoriše
         )
         {
@@ -168,7 +164,7 @@ namespace MedVault.Api.Controllers
             var list = await db.Encounters.AsNoTracking()
                 .Where(e => e.PatientId == patientId)
                 .OrderByDescending(e => e.EncounterDate)
-                .Select(e => new { e.Id, e.EncounterDate, e.Status, e.Reason, HasNotes = e.NotesEnc != null, e.ClinicianId })
+                .Select(e => new { e.Id, e.EncounterDate, e.Status, e.Reason, HasNotes = e.NotesEnc != null, e.DepartmentId })
                 .ToListAsync();
 
             return Ok(list);
@@ -210,7 +206,7 @@ namespace MedVault.Api.Controllers
                 EncounterDate = dto.EncounterDate,
                 Status = "Scheduled",
                 Reason = dto.Reason,
-                ClinicianId = clinicianId == Guid.Empty ? null : clinicianId,
+                DepartmentId = p.DepartmentId,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -225,38 +221,40 @@ namespace MedVault.Api.Controllers
             var e = await db.Encounters.FindAsync(id);
             if (e == null) return NotFound();
 
-            // Guard
             if (Role() == "Doctor")
             {
                 var dept = CurrentDeptId();
-                var pDept = await db.Patients.Where(p => p.Id == e.PatientId).Select(p => p.DepartmentId).SingleOrDefaultAsync();
+                var pDept = await db.Patients.Where(p => p.Id == e.PatientId)
+                                             .Select(p => p.DepartmentId)
+                                             .SingleOrDefaultAsync();
                 if (dept.HasValue && pDept.HasValue && dept != pDept) return Forbid();
-                if (e.ClinicianId.HasValue && e.ClinicianId != CurrentUserId()) return Forbid();
+
+                // 🚩 uklonjeno: if (e.ClinicianId.HasValue && e.ClinicianId != CurrentUserId()) return Forbid();
             }
 
             e.Status = "Completed";
             if (!string.IsNullOrWhiteSpace(dto.Notes))
-            {
-                // šifruj tekst beleške
                 e.NotesEnc = crypto.EncryptString(dto.Notes, out _, out _);
-            }
+
             await db.SaveChangesAsync();
             return Ok(new { ok = true });
         }
- 
+
         [HttpPatch("{id:guid}/cancel"), Authorize(Policy = "DoctorOrAdmin")]
         public async Task<IActionResult> Cancel(Guid id)
         {
             var e = await db.Encounters.FindAsync(id);
             if (e == null) return NotFound();
 
-            // Guard
             if (Role() == "Doctor")
             {
                 var dept = CurrentDeptId();
-                var pDept = await db.Patients.Where(p => p.Id == e.PatientId).Select(p => p.DepartmentId).SingleOrDefaultAsync();
+                var pDept = await db.Patients.Where(p => p.Id == e.PatientId)
+                                             .Select(p => p.DepartmentId)
+                                             .SingleOrDefaultAsync();
                 if (dept.HasValue && pDept.HasValue && dept != pDept) return Forbid();
-                if (e.ClinicianId.HasValue && e.ClinicianId != CurrentUserId()) return Forbid();
+
+ 
             }
 
             e.Status = "Canceled";
@@ -305,10 +303,11 @@ namespace MedVault.Api.Controllers
 
             var uid = CurrentUserId();
             if (uid is null) return Forbid();
+            var deptId = CurrentDeptId();
 
             var myRows = await baseQuery
-                .Where(e => e.ClinicianId == uid)
-                .Select(e => new { e.Id, e.PatientId, e.EncounterDate, e.Reason })
+                .Where(e => e.DepartmentId == deptId)
+                .Select(e => new { e.Id, e.PatientId, e.DepartmentId,e.EncounterDate, e.Reason })
                 .ToListAsync();
 
             var myPatients = await db.Patients.AsNoTracking()
@@ -316,7 +315,7 @@ namespace MedVault.Api.Controllers
                 .Select(p => new { p.Id, p.DepartmentId, p.FirstNameEnc, p.LastNameEnc })
                 .ToListAsync();
              
-            var deptId = CurrentDeptId();
+             
             if (deptId.HasValue)
             {
                 var allowed = myPatients.Where(p => p.DepartmentId == deptId).Select(p => p.Id).ToHashSet();
