@@ -109,5 +109,32 @@ namespace MedVault.Api.Controllers
             string Dec(byte[] b) => crypto.DecryptToString(b);
             return Ok(new PatientViewDto(p.Id, p.MedicalRecordNumber, Dec(p.FirstNameEnc), Dec(p.LastNameEnc), p.CreatedAt, p.DepartmentId));
         }
+
+        //[HttpPut("{id:guid}")]
+        //[Authorize(Roles = "Admin")]
+        //public async Task<IActionResult> Update(Guid id, [FromBody] UpdatePatientDto dto)
+        //{
+        //    var p = await _db.Patients.FirstOrDefaultAsync(x => x.Id == id);
+        //    if (p is null) return NotFound();
+
+        //    p.FirstName = dto.FirstName?.Trim() ?? p.FirstName;
+        //    p.LastName = dto.LastName?.Trim() ?? p.LastName;
+        //    p.DepartmentId = dto.DepartmentId;
+
+        //    await _db.SaveChangesAsync();
+        //    return NoContent();
+        //}
+
+        [HttpDelete("{id:guid}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            var p = await db.Patients.FirstOrDefaultAsync(x => x.Id == id);
+            if (p is null) return NotFound();
+
+            db.Patients.Remove(p);
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
     }
 }

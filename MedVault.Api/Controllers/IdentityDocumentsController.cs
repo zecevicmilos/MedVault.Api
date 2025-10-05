@@ -20,7 +20,7 @@ namespace MedVault.Api.Controllers
             return (role, Guid.TryParse(dept, out var d) ? d : null);
         }
 
-        [HttpPost("{patientId:guid}"), Authorize(Policy = "AdminOnly")]
+        [HttpPost("{patientId:guid}"), Authorize(Policy = "DoctorOrAdmin")]
         [Consumes("multipart/form-data")]
         [RequestFormLimits(ValueCountLimit = 10_000, MultipartBodyLengthLimit = 100_000_000)]
         public async Task<IActionResult> Upload(Guid patientId, [FromForm] IdentityDocUploadDto form)
