@@ -143,16 +143,15 @@ public partial class MedVaultDbContext : DbContext
 
         modelBuilder.Entity<PatientIdentityDocuments>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("PK__PatientI__3214EC07AA29C09E");
+            entity.HasIndex(e => new { e.PatientId, e.CreatedAt }, "IX_PatientIdentityDocuments_Patient_CreatedAt");
 
             entity.Property(e => e.Id).ValueGeneratedNever();
+            entity.Property(e => e.ContentType).HasMaxLength(120);
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasAnnotation("Relational:DefaultConstraintName", "DF_PatientIdentityDocuments_CreatedAt");
-            entity.Property(e => e.DocNumberEnc).IsRequired();
-            entity.Property(e => e.DocType)
-                .IsRequired()
-                .HasMaxLength(40);
+            entity.Property(e => e.DocNameEnc).IsRequired();
+            entity.Property(e => e.DocType).HasMaxLength(40);
 
             entity.HasOne(d => d.Patient).WithMany(p => p.PatientIdentityDocuments)
                 .HasForeignKey(d => d.PatientId)

@@ -5,10 +5,10 @@ namespace MedVault.Api.Dtos
 {
     public class IdentityDocUploadDto
     {
-        [Required] public string DocType { get; set; } = default!;
-        [Required] public string DocNumber { get; set; } = default!;
+        [Required] public string DocName { get; set; } = default!;   // Naziv dokumenta
+        [Required] public IFormFile Scan { get; set; } = default!;   // obavezno
+
         public string? IssueDateIso { get; set; }
         public string? ExpiryDateIso { get; set; }
-        public IFormFile? Scan { get; set; }           
     }
 }

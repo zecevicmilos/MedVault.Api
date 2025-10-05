@@ -13,7 +13,7 @@ public partial class PatientIdentityDocuments
 
     public string DocType { get; set; }
 
-    public byte[] DocNumberEnc { get; set; }
+    public byte[] DocNameEnc { get; set; }
 
     public byte[] IssueDateEnc { get; set; }
 
@@ -22,6 +22,10 @@ public partial class PatientIdentityDocuments
     public byte[] ScanBlob { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public string ContentType { get; set; }
+
+    public byte[] OriginalFileNameEnc { get; set; }
 
     public virtual Patients Patient { get; set; }
 }
